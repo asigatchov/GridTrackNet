@@ -48,11 +48,8 @@ class ImageViewer(QMainWindow):
         self.view.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.view.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
         self.view.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
-        self.view.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform | QPainter.NonCosmeticDefaultPen)
         self.view.setMouseTracking(True)
-        self.view.setRenderHint(QPainter.Antialiasing, True)
-        self.view.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        self.view.setRenderHint(QPainter.NonCosmeticDefaultPen, True)
+        self._apply_render_hints()
         
         self.view.wheelEvent = self.wheelEvent
         self.view.mousePressEvent = self.getPixelCoordinates
@@ -126,6 +123,11 @@ class ImageViewer(QMainWindow):
 
         self.showImage()
 
+    def _apply_render_hints(self):
+        render_hints = QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+        render_hints |= QPainter.RenderHint.TextAntialiasing
+        self.view.setRenderHints(render_hints)
+
     def wheelEvent(self, event):
         if event.angleDelta().y() > 0: 
             self.zoomLevel = self.zoomLevel * 1.2
@@ -148,11 +150,7 @@ class ImageViewer(QMainWindow):
             self.annotated[i] = False
 
     def showImage(self):
-        self.view.setRenderHint(QPainter.Antialiasing)
-        self.view.setRenderHint(QPainter.SmoothPixmapTransform)
-        self.view.setRenderHint(QPainter.HighQualityAntialiasing)
-        self.view.setRenderHint(QPainter.TextAntialiasing)
-        self.view.setRenderHint(QPainter.NonCosmeticDefaultPen)
+        self._apply_render_hints()
 
         self.pixmap = QPixmap(self.images[self.frameIndex])
         self.view.setScene(QGraphicsScene())
