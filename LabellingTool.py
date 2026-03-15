@@ -97,6 +97,10 @@ class ImageViewer(QMainWindow):
         self.saveResultsButton.setFixedSize(200, 75)
         self.saveResultsButton.clicked.connect(self.saveResults)
 
+        self.loadCsvButton = QPushButton("Load CSV", self)
+        self.loadCsvButton.setFixedSize(200, 75)
+        self.loadCsvButton.clicked.connect(self.loadResults)
+
         self.crosshairCheckbox = QCheckBox("Show Crosshair", self)
         self.crosshairCheckbox.setChecked(True)
         self.crosshairCheckbox.setFont(QFont("Arial", 20))
@@ -123,6 +127,7 @@ class ImageViewer(QMainWindow):
         self.buttonLayout.addWidget(self.removePixelButton)
         self.buttonLayout.addWidget(self.removeFrameButton)
         self.buttonLayout.addWidget(self.saveResultsButton)
+        self.buttonLayout.addWidget(self.loadCsvButton)
         self.buttonLayout.addWidget(self.crosshairCheckbox)
         self.buttonLayout.addStretch()
 
@@ -353,6 +358,53 @@ class ImageViewer(QMainWindow):
 
             QApplication.instance().quit()
 
+    def loadResults(self):
+        csv_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Labels CSV",
+            MATCH_DIR,
+            "CSV Files (*.csv)"
+        )
+
+        if not csv_path:
+            return
+
+        frame_to_index = {}
+        for index, frame_value in enumerate(self.images):
+            source_index = frame_value if self.video_path is not None else index
+            frame_to_index[source_index] = index
+
+        loaded_rows = 0
+        self.pixelCoordinates.clear()
+        self.states.clear()
+        self.annotated = {i: False for i in range(len(self.images))}
+
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    source_index = int(row["Frame"])
+                    visibility = int(row["Visibility"])
+                    x_coord = int(row["X"])
+                    y_coord = int(row["Y"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+                if source_index not in frame_to_index:
+                    continue
+
+                frame_index = frame_to_index[source_index]
+                self.states[frame_index] = "VISIBLE" if visibility == 1 else "INVISIBLE"
+
+                if x_coord != 0 or y_coord != 0:
+                    self.pixelCoordinates[frame_index] = (x_coord, y_coord)
+
+                self.annotated[frame_index] = True
+                loaded_rows += 1
+
+        print(f"Loaded {loaded_rows} annotations from {csv_path}")
+        self.showImage()
+
     def stepFrame(self, offset):
         if len(self.images) == 0:
             return
@@ -376,13 +428,17 @@ class ImageViewer(QMainWindow):
         pos = event.pos()
         scene_pos = self.view.mapToScene(pos)
 
+        if event.button() == Qt.MiddleButton:
+            self.removePixel()
+            return
+
+        if event.button() != Qt.LeftButton:
+            return
+
         self.pixelCoordinates[self.frameIndex] = (scene_pos.x(), scene_pos.y())
         self.annotated[self.frameIndex] = True
         
         self.currentCenterPoint = QPointF(scene_pos.x(), scene_pos.y())
-        if self.frameIndex < len(self.images) - 1:
-            self.frameIndex += 1
-        
         self.showImage()
 
 
