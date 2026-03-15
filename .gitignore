@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.DS_Store
+
+model_weights.onnx
+*.mp4
+*.avi
+*.csv
+
+results/

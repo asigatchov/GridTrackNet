@@ -1,6 +1,6 @@
-from keras.models import *
-from keras.layers import *
-from keras.activations import *
+from tensorflow.keras.activations import *
+from tensorflow.keras.layers import *
+from tensorflow.keras.models import *
 
 def GridTrackNet(imgs_per_instance, input_height, input_width ):
 
@@ -68,4 +68,3 @@ def GridTrackNet(imgs_per_instance, input_height, input_width ):
 	model = Model( imgs_input , output)
 
 	return model
-

@@ -3,13 +3,13 @@ import os
 import csv
 import argparse
 
-from PySide2 import QtCore
-from PySide2.QtCore import QDir, Qt, QRectF, QPoint, QPointF
-from PySide2.QtGui import QImage, QKeyEvent, QPainter, QPixmap, QColor, QPen, QFont, QBrush, QTransform
-from PySide2.QtWidgets import QApplication, QLabel, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QWidget
-from PySide2.QtWidgets import QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox
-from PySide2.QtWidgets import QFileDialog, QGraphicsTextItem
-from PySide2.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from PySide6 import QtCore
+from PySide6.QtCore import QDir, Qt, QRectF, QPoint, QPointF
+from PySide6.QtGui import QImage, QKeyEvent, QPainter, QPixmap, QColor, QPen, QFont, QBrush, QTransform
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsEllipseItem, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox
+from PySide6.QtWidgets import QFileDialog, QGraphicsTextItem
+from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 
 parser = argparse.ArgumentParser(description='Argument Parser for GridTrackNet')
 
@@ -274,7 +274,7 @@ class ImageViewer(QMainWindow):
             for i in range(len(self.images)):
                 os.rename(str(self.images[i]), os.path.join(FRAMES_DIR, str(i) + ".png"))
 
-            sys.exit(app.exec_())
+            sys.exit(app.exec())
       
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_A:
@@ -307,4 +307,4 @@ if __name__ == '__main__':
     viewer = ImageViewer()
     viewer.show()
     #viewer.showFullScreen()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

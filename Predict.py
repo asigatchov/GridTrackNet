@@ -1,8 +1,10 @@
 import cv2
 import argparse
+import csv
 import os
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
 from GridTrackNet import GridTrackNet
 
 WIDTH = 768
@@ -14,10 +16,36 @@ GRID_SIZE_COL = WIDTH/GRID_COLS
 GRID_SIZE_ROW = HEIGHT/GRID_ROWS
 
 MODEL_DIR = os.path.join(os.getcwd(),"model_weights.h5")
-model = GridTrackNet(IMGS_PER_INSTANCE, HEIGHT, WIDTH)
-model.load_weights(MODEL_DIR)
+model = None
+loaded_model_dir = None
 
-def getPredictions(frames, isBGRFormat = False):
+
+def is_headless():
+    return not any(os.environ.get(name) for name in ("DISPLAY", "WAYLAND_DISPLAY"))
+
+
+def configure_tensorflow():
+    try:
+        for gpu in tf.config.list_physical_devices("GPU"):
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except Exception:
+        pass
+
+
+def getModel(model_dir=MODEL_DIR):
+    global model
+    global loaded_model_dir
+
+    if model is None:
+        model = GridTrackNet(IMGS_PER_INSTANCE, HEIGHT, WIDTH)
+
+    if loaded_model_dir != model_dir:
+        model.load_weights(model_dir)
+        loaded_model_dir = model_dir
+
+    return model
+
+def getPredictions(frames, predict_batch_size, isBGRFormat = False):
     outputHeight = frames[0].shape[0]
     outputWidth = frames[0].shape[1]
     
@@ -45,7 +73,8 @@ def getPredictions(frames, isBGRFormat = False):
     units = units.astype(np.float32)
     units /= 255
 
-    y_pred = model.predict(units, batch_size=len(batches),verbose=0)
+    batch_size = max(1, min(predict_batch_size, len(batches)))
+    y_pred = getModel().predict(units, batch_size=batch_size, verbose=0)
     
     y_pred = np.split(y_pred, IMGS_PER_INSTANCE, axis=1)
     y_pred = np.stack(y_pred, axis=2)
@@ -87,17 +116,29 @@ def getPredictions(frames, isBGRFormat = False):
 if __name__ == "__main__":  
     parser = argparse.ArgumentParser(description='Argument Parser for GridTrackNet')
 
-    parser.add_argument('--video_dir', required=True, type=str, help="Path to .mp4 video file.")
-    parser.add_argument('--model_dir', required=False, default=os.path.join(os.getcwd(),"model_weights.h5"), type=str, help="Path to saved Tensorflow model.")
+    parser.add_argument('--video_path', required=True, type=str, help="Path to input .mp4 video file.")
+    parser.add_argument('--model_path', required=False, default=os.path.join(os.getcwd(), "model_weights.h5"), type=str, help="Path to TensorFlow weights file.")
     parser.add_argument('--display_trail', required=False, default=1, type=int, help="Output a visible trail of the ball's trajectory. Default = 1")
+    parser.add_argument('--output_dir', required=False, default=None, type=str, help="Directory to save output video and CSV.")
+    parser.add_argument('--only_csv', action='store_true', default=False, help="Save only CSV, skip video output.")
+    parser.add_argument('--chunk_size', required=False, default=5, type=int, help="Number of frames buffered before inference. Use multiples of 5. Default = 5")
+    parser.add_argument('--predict_batch_size', required=False, default=1, type=int, help="TensorFlow predict batch size. Lower values reduce VRAM usage. Default = 1")
 
     args = parser.parse_args()
 
-    VIDEO_DIR = args.video_dir
-    MODEL_DIR = args.model_dir 
+    VIDEO_DIR = args.video_path
+    MODEL_DIR = args.model_path
     DISPLAY_TRAIL = bool(args.display_trail)
+    OUTPUT_DIR = args.output_dir
+    ONLY_CSV = args.only_csv
+    CHUNK_SIZE = max(IMGS_PER_INSTANCE, args.chunk_size)
+    PREDICT_BATCH_SIZE = max(1, args.predict_batch_size)
 
-    model.load_weights(MODEL_DIR)
+    if CHUNK_SIZE % IMGS_PER_INSTANCE != 0:
+        raise ValueError(f"--chunk_size must be a multiple of {IMGS_PER_INSTANCE}")
+
+    configure_tensorflow()
+    getModel(MODEL_DIR)
 
     cap = cv2.VideoCapture(VIDEO_DIR)
 
@@ -118,59 +159,98 @@ if __name__ == "__main__":
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  
-
     directory, filename = os.path.split(VIDEO_DIR)
     name, extension = os.path.splitext(filename)
-    output_filename = name + " Predicted" + extension
-    output_path = os.path.join(directory, output_filename)
-
-    if(numFramesSkip == 1):
-        outputFPS = fps
+    if OUTPUT_DIR:
+        output_base_dir = os.path.join(OUTPUT_DIR, name)
+        os.makedirs(output_base_dir, exist_ok=True)
     else:
-        outputFPS = 30
-    video_writer = cv2.VideoWriter(output_path, fourcc, outputFPS, (frame_width, frame_height))
+        output_base_dir = directory
+
+    csv_path = os.path.join(output_base_dir, "ball.csv")
+    csv_file = open(csv_path, "w", newline="", buffering=1)
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(["Frame", "Visibility", "X", "Y"])
+    csv_file.flush()
+
+    video_writer = None
+    if not ONLY_CSV:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        if OUTPUT_DIR:
+            output_path = os.path.join(output_base_dir, "predict.mp4")
+        else:
+            output_filename = name + " Predicted" + extension
+            output_path = os.path.join(output_base_dir, output_filename)
+
+        if(numFramesSkip == 1):
+            outputFPS = fps
+        else:
+            outputFPS = 30
+        video_writer = cv2.VideoWriter(output_path, fourcc, outputFPS, (frame_width, frame_height))
 
     index = 0
 
     frames = []
     ballCoordinatesHistory = []
-    numPredicted = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
+    predictedFrameIndex = 0
+    pbar = tqdm(total=totalFrames, desc="Processing video", unit="frame")
 
-        if not ret:
-            print("\nDone")
-            break
-        
-        if(index % numFramesSkip == 0):
-            numPredicted += 1
-            frames.append(frame)
-            if(len(frames) == 5):
-                ballCoordinates = getPredictions(frames, True)
+    def writePredictedFrames(predicted_frames, ballCoordinates):
+        nonlocal_predictedFrameIndex = predictedFrameIndex
+        history_start_idx = len(ballCoordinatesHistory) - len(ballCoordinates)
+        for i, frame in enumerate(predicted_frames):
+            if(i < len(ballCoordinates)):
+                x, y = ballCoordinates[i]
+                visibility = 0 if (x == 0 and y == 0) else 1
+                csv_writer.writerow([nonlocal_predictedFrameIndex, visibility, x, y])
+                nonlocal_predictedFrameIndex += 1
+
+                if(DISPLAY_TRAIL):
+                    current_history_idx = history_start_idx + i
+                    for trail_offset in range(7, 0, -2):
+                        idx = current_history_idx - trail_offset
+                        if idx >= 0:
+                            cv2.circle(frame, ballCoordinatesHistory[idx], 4, (0, 255, 255),-1)
+                else:
+                    cv2.circle(frame, ballCoordinates[i], 8, (0, 0, 255),4)
+
+            if video_writer is not None:
+                video_writer.write(frame)
+
+        csv_file.flush()
+        return nonlocal_predictedFrameIndex
+
+    try:
+        while cap.isOpened():
+            ret, frame = cap.read()
+
+            if not ret:
+                break
+            
+            if(index % numFramesSkip == 0):
+                frames.append(frame)
+                pbar.update(1)
+                if(len(frames) == CHUNK_SIZE):
+                    ballCoordinates = getPredictions(frames, PREDICT_BATCH_SIZE, True)
+                    for ball in ballCoordinates:
+                        ballCoordinatesHistory.append(ball)
+                    predictedFrameIndex = writePredictedFrames(frames, ballCoordinates)
+                    frames = []
+
+            index += 1
+
+        if len(frames) >= 5:
+            processable_frames = frames[:len(frames) - (len(frames) % 5)]
+            if processable_frames:
+                ballCoordinates = getPredictions(processable_frames, PREDICT_BATCH_SIZE, True)
                 for ball in ballCoordinates:
                     ballCoordinatesHistory.append(ball)
-                    
-                for i, frame in enumerate(frames):
-                    if(i < len(ballCoordinates)):
-                        if(DISPLAY_TRAIL):
-                            if(len(ballCoordinatesHistory) >= 15):
-                                for j in range(7,-1,-2):
-                                    idx = len(ballCoordinatesHistory)-5-j+i
-                                    cv2.circle(frame, ballCoordinatesHistory[idx], 4, (0, 255, 255),-1)
-                        else:
-                            cv2.circle(frame, ballCoordinates[i], 8, (0, 0, 255),4)
-
-                    video_writer.write(frame)
-
-                frames = []
-
-
-        index += 1
-        percentage = numPredicted*100/totalFrames
-        print('Exporting...[%d%%]\r'%int(percentage), end="")
-
-    cap.release()
-    video_writer.release()
-
-    cv2.destroyAllWindows()
+                predictedFrameIndex = writePredictedFrames(processable_frames, ballCoordinates)
+    finally:
+        pbar.close()
+        cap.release()
+        csv_file.close()
+        if video_writer is not None:
+            video_writer.release()
+        if not is_headless():
+            cv2.destroyAllWindows()

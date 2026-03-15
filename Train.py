@@ -2,15 +2,15 @@ import numpy as np
 import sys, getopt
 import os
 from glob import glob
-from keras.models import *
-from keras.layers import *
+from tensorflow.keras.layers import *
+from tensorflow.keras.losses import *
+from tensorflow.keras.models import *
 from GridTrackNet import GridTrackNet
-import keras.backend as K
-from keras import optimizers
-from keras.activations import *
+from tensorflow.keras import backend as K
+from tensorflow.keras import optimizers
+from tensorflow.keras.activations import *
 import tensorflow as tf
 import math
-from keras.losses import *
 import argparse
 import csv
 

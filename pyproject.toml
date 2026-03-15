@@ -1,0 +1,17 @@
+[project]
+name = "gridtracknet"
+version = "0.1.0"
+description = "GridTrackNet training and inference utilities"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "numpy>=2.2.4",
+    "onnx>=1.20.1",
+    "onnxruntime-gpu>=1.23.2",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.1.0",
+    "pyside6>=6.8.2.1,<6.10",
+    "tensorflow[and-cuda]>=2.18.1",
+    "tf2onnx>=1.17.0",
+    "tqdm>=4.67.3",
+]

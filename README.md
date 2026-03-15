@@ -37,15 +37,13 @@ Originally based on TrackNetV2: https://nol.cs.nctu.edu.tw:234/open-source/Track
 **Note: metrics were computed only once on a separate test dataset of sufficient size.*
 
 ## Setup
-1. Follow the complete Tensorflow installation guide for the installation on your system and how to enable hardware acceleration.
-      - Linux/Windows: https://www.tensorflow.org/install/pip
-      - Mac: https://developer.apple.com/metal/tensorflow-plugin/
-
-2. Create a virtual environment (Conda, Miniforge, etc.) using `python=3.10.8`
-3. In your virtual environment, run:
+1. Install `uv`: https://docs.astral.sh/uv/
+2. Use Python 3.10 for the project.
+3. Sync the environment with `uv`:
 ```commandline
-pip install -r "path/to/requirements.txt"
+uv sync
 ```
+This installs TensorFlow with CUDA support on Linux, plus ONNX Runtime GPU dependencies from `pyproject.toml`.
 
 ## Inference
 ### Video Output
@@ -53,21 +51,41 @@ pip install -r "path/to/requirements.txt"
 
 Example usage:
 ```commandline
-python "/path/to/Predict.py" --video_dir="/path/to/video.mp4" --model_dir="/path/to/model_weights.h5" --display_trail=1
+uv run Predict.py --video_path="/path/to/video.mp4" --model_path="/path/to/model_weights.h5" --display_trail=1
 ``` 
-
-
 
 |Argument|Description|  
 |-----|----|
-|video_dir (required) | Path to a `.mp4` video|
-|model_dir (optional) | Path to `model_weights.h5` file for loading a custom model|
+|video_path (required) | Path to an input `.mp4` video file|
+|model_path (optional) | Path to a `model_weights.h5` weights file|
 |display_trail (optional) | Displays a yellow trail of the ball trajectory. If set to 0, only a red circle around the predicted ball location is displayed on each frame.|
+|chunk_size (optional) | Number of buffered frames before inference. Must be a multiple of 5. Default = 5|
+|predict_batch_size (optional) | TensorFlow predict batch size. Lower values reduce VRAM usage. Default = 1|
+
+### ONNX Export
+Export TensorFlow weights to ONNX:
+```commandline
+uv run export_onnx.py --model_path="/path/to/model_weights.h5" --output_path="/path/to/model_weights.onnx"
+```
+
+### ONNX Inference
+Run inference directly from a pre-exported `.onnx` model:
+```commandline
+uv run inference_onnx.py --video_path="/path/to/video.mp4" --model_path="/path/to/model_weights.onnx" --provider=gpu --display_trail=1
+```
+
+|Argument|Description|  
+|-----|----|
+|video_path (required) | Path to an input `.mp4` video file|
+|model_path (optional) | Path to an ONNX model file|
+|provider (optional) | `gpu` or `cpu` execution provider. Default = `gpu`|
+|display_trail (optional) | Displays a yellow trail of the ball trajectory. If set to 0, only a red circle around the predicted ball location is displayed on each frame.|
+|chunk_size (optional) | Number of buffered frames before inference. Must be a multiple of 5. Default = 5|
 
 ### API
 `Predict.py` script can be imported in your own code and be called by the following function:
 ```commandline 
-Predict.getPredictions(frames, isBGRFormat = False)
+Predict.getPredictions(frames, predict_batch_size, isBGRFormat = False)
 ```
 
 Receives as input a list of concurrent frames (number of frames should be a multiple of 5), and outputs a list of pixel coordinates for each input frame. If no ball was detected, the model returns coordinate (0,0). In case the frames are in BGR format (such as when using OpenCV), specify this with the `isBGRFormat` argument.
@@ -79,7 +97,7 @@ Receives as input a list of concurrent frames (number of frames should be a mult
 2. For each match folder, use `LabellingTool.py` to label all frames.
 3. After annotating all data, use `DataGen.py` to generate the dataset in TFRecord format.
 4. Train the model using `Train.py`.
-5. Deploy your custom model! You can use `Predict.py` by specifying the path to the saved `.h5` file with the argument `--model_dir`
+5. Deploy your custom model by passing the saved `.h5` file to `Predict.py` with `--model_path`, or export it to ONNX with `export_onnx.py`.
 
 *More detailed explanations for each utility can be found below. For each utility, the `-h` flag can be used to check supported arguments.*
 
@@ -130,7 +148,7 @@ Note: input video format must be `.mp4`, be either 30FPS or 60FPS, and at least 
 
 Example usage:
 ```commandline
-python "/path/to/FrameGenerator.py" --video_dir="path/to/video.mp4" --export_dir="path/to/Dataset/matchX"
+uv run FrameGenerator.py --video_dir="path/to/video.mp4" --export_dir="path/to/Dataset/matchX"
 ```   
 
 ### 2. Labelling Tool
@@ -144,7 +162,7 @@ You can save the annotations only after all frames have been annotated, either w
 
 Example usage:
 ```commandline
-python "/path/to/LabellingTool.py" --match_dir="path/to/Dataset/matchX"
+uv run LabellingTool.py --match_dir="path/to/Dataset/matchX"
 ```   
 
 Controls:
@@ -171,7 +189,7 @@ Link to the original dataset (48.2GB): [https://drive.google.com/drive/folders/1
 
 Example usage:
 ```commandline
-python "/path/to/DataGen.py" --input_dir="path/to/your/matches/folder" --export_dir="path/to/your/export/folder" --val_split=0.2 --augment_data=1 --next_img_index=2
+uv run DataGen.py --input_dir="path/to/your/matches/folder" --export_dir="path/to/your/export/folder" --val_split=0.2 --augment_data=1 --next_img_index=2
 ```
 Accepted arguments:
 |Argument|Description|  
@@ -188,7 +206,7 @@ Accepted arguments:
 `Train.py` can be used to train the GridTrackNet model with custom data.
 
 ```commandline
-python "/path/to/Train.py" --data_dir="path/to/tfrecord/files" --save_weights="path/to/your/export/folder" --epochs=50 --tol=4
+uv run Train.py --data_dir="path/to/tfrecord/files" --save_weights="path/to/your/export/folder" --epochs=50 --tol=4
 ```
 Accepted arguments:
 |Argument|Description|  
@@ -248,8 +266,6 @@ Adapted version of the VGG16 model.<sup>2</sup>
 *Disclaimers*:
 - *The data set provided is a compilation of data gathered from various sources. Due to the diverse and widespread nature of these sources, it is not feasible to individually cite each one. The compilation and presentation of this data is primarily intended for research and educational purposes. If you are the owner of any data included in this dataset and have concerns about its use, please contact us directly.* 
 - *Some parts of the source code have been developed in assistance with ChatGPT-4 and, even though unlikely, might contain unexpected behavior at times.*
-
-
 
 
 
