@@ -378,13 +378,12 @@ class ImageViewer(QMainWindow):
 
         self.pixelCoordinates[self.frameIndex] = (scene_pos.x(), scene_pos.y())
         self.annotated[self.frameIndex] = True
-
-        self.drawCrosshair(scene_pos.x(), scene_pos.y())
         
         self.currentCenterPoint = QPointF(scene_pos.x(), scene_pos.y())
         if self.frameIndex < len(self.images) - 1:
             self.frameIndex += 1
-            self.showImage()
+        
+        self.showImage()
 
 
 if __name__ == '__main__':
