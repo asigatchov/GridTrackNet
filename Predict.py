@@ -62,23 +62,18 @@ def getPredictions(frames, predict_batch_size, isBGRFormat = False):
             if(isBGRFormat):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = cv2.resize(frame,(WIDTH,HEIGHT))
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = np.moveaxis(frame, -1, 0)
-            unit.append(frame[0])
-            unit.append(frame[1])
-            unit.append(frame[2])
+            unit.append(frame)
         units.append(unit) 
     
-    units = np.asarray(units)
-    units = units.astype(np.float32)
+    units = np.asarray(units, dtype=np.float32)
+    units = units.reshape((-1, HEIGHT, WIDTH, IMGS_PER_INSTANCE * 3))
     units /= 255
 
     batch_size = max(1, min(predict_batch_size, len(batches)))
     y_pred = getModel().predict(units, batch_size=batch_size, verbose=0)
     
-    y_pred = np.split(y_pred, IMGS_PER_INSTANCE, axis=1)
-    y_pred = np.stack(y_pred, axis=2)
-    y_pred = np.moveaxis(y_pred, 1, -1)
+    y_pred = np.reshape(y_pred, (-1, GRID_ROWS, GRID_COLS, IMGS_PER_INSTANCE, 3))
+    y_pred = np.transpose(y_pred, (0, 3, 1, 2, 4))
 
     confGrid, xOffsetGrid, yOffsetGrid = np.split(y_pred, 3, axis=-1)
 

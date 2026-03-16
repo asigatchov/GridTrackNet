@@ -25,7 +25,7 @@ def export_onnx(weights_path, onnx_path, opset):
     model.load_weights(weights_path)
     signature = (
         tf.TensorSpec(
-            shape=(None, IMGS_PER_INSTANCE * 3, HEIGHT, WIDTH),
+            shape=(None, HEIGHT, WIDTH, IMGS_PER_INSTANCE * 3),
             dtype=tf.float32,
             name="input",
         ),
