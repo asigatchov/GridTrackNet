@@ -146,7 +146,7 @@ if __name__ == "__main__":
         print("Error opening video file")
 
     fps = int(cap.get(cv2.CAP_PROP_FPS))
-    if(fps >= 57 and fps <= 62):
+    if(fps >= 47 and fps <= 62):
         numFramesSkip = 2
     elif (fps >= 22 and fps <= 32):
         numFramesSkip = 1
