@@ -12,3 +12,4 @@ model_weights.onnx
 *.csv
 
 results/
+__pycache__
